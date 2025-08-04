@@ -1,55 +1,35 @@
 package main
 
 import (
-    "fmt"
-    "net/http"
+	"github.com/gin-gonic/gin"
 
-    "github.com/gin-gonic/gin"
-    "github.com/gorilla/websocket"
+	"github.com/DanielGregorini/notepad-on/config"
+	"github.com/DanielGregorini/notepad-on/db"
+	"github.com/DanielGregorini/notepad-on/model"
+    "github.com/DanielGregorini/notepad-on/routes"
 )
 
-// defina o upgrader como uma variável de pacote, com CheckOrigin liberado
-var upgrader = websocket.Upgrader{
-    ReadBufferSize:  1024,
-    WriteBufferSize: 1024,
-    CheckOrigin: func(r *http.Request) bool {
-        return true // aceita qualquer origin (só para dev!)
-    },
-}
-
-func wsHandler(c *gin.Context) {
-    conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-    if err != nil {
-        fmt.Println("upgrade error:", err)
-        return
-    }
-    defer conn.Close()
-
-    for {
-        msgType, payload, err := conn.ReadMessage()
-        if err != nil {
-            fmt.Println("read error:", err)
-            break
-        }
-        fmt.Printf("Recebi (%d bytes): %s\n", len(payload), string(payload))
-        resposta := "mensagem: oi"
-        if err := conn.WriteMessage(msgType, []byte(resposta)); err != nil {
-            fmt.Println("write error:", err)
-            break
-        }
-    }
-}
+var (
+	cfg    = config.Load()
+	dbConn = db.Connect(cfg)
+)
 
 func main() {
-    r := gin.Default()
 
-    // aceita qualquer um
-    r.SetTrustedProxies([]string{"*"})
+	// migrations db
+	dbConn.AutoMigrate(&model.Page{})
 
+	server := gin.Default()
 
-    r.GET("/", func(c *gin.Context) {
-        c.JSON(200, gin.H{"message": "api funcionando!"})
-    })
-    r.GET("/ws", wsHandler)
-    r.Run(":8888")
+	// aceita qualquer um
+	server.SetTrustedProxies([]string{"*"})
+
+	server.GET("/", func(c *gin.Context) {
+		c.JSON(200, gin.H{"message": "api funcionando!"})
+	})
+
+    //rotas
+    routes.PageRoute(server)
+
+	server.Run(":8888")
 }
