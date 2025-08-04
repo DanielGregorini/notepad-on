@@ -7,15 +7,17 @@ import (
 	"github.com/DanielGregorini/notepad-on/db"
 	"github.com/DanielGregorini/notepad-on/model"
     "github.com/DanielGregorini/notepad-on/routes"
+	"github.com/DanielGregorini/notepad-on/controller"
 )
 
 var (
 	cfg    = config.Load()
 	dbConn = db.Connect(cfg)
+
+	userController = controller.NewPageController(dbConn)
 )
 
 func main() {
-
 	// migrations db
 	dbConn.AutoMigrate(&model.Page{})
 
@@ -29,7 +31,7 @@ func main() {
 	})
 
     //rotas
-    routes.PageRoute(server)
+    routes.PageRoute(server, userController)
 
 	server.Run(":8888")
 }
