@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Teste WebSocket Gin</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    #log { border: 1px solid #ccc; padding: 1rem; height: 200px; overflow-y: auto; }
+    #log div { margin-bottom: 0.5rem; }
+    input, button { padding: 0.5rem; margin-right: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Teste WebSocket (/ws)</h1>
+  <div>
+    <input id="msgIn" type="text" placeholder="Digite sua mensagem" />
+    <button id="btnSend">Enviar</button>
+  </div>
+  <h2>Log</h2>
+  <div id="log"></div>
+
+  <script>
+    // ajusta a URL se seu servidor não estiver em localhost:8888
+    const ws = new WebSocket("ws://" + location.hostname + ":8888/ws");
+
+    const logEl = document.getElementById("log");
+    const msgIn = document.getElementById("msgIn");
+    const btnSend = document.getElementById("btnSend");
+
+    function addLog(text) {
+      const el = document.createElement("div");
+      el.textContent = text;
+      logEl.appendChild(el);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    ws.addEventListener("open", () => {
+      addLog("Conexão aberta");
+    });
+
+    ws.addEventListener("message", ev => {
+      addLog("Recebido do servidor: " + ev.data);
+    });
+
+    ws.addEventListener("close", () => {
+      addLog("Conexão fechada");
+    });
+
+    ws.addEventListener("error", err => {
+      addLog("Erro: " + err);
+    });
+
+    btnSend.addEventListener("click", () => {
+      const msg = msgIn.value.trim();
+      if (!msg) return;
+      addLog("Enviando: " + msg);
+      ws.send(msg);
+      msgIn.value = "";
+    });
+
+    // opcional: envie “oi” automaticamente ao carregar a página
+    // ws.addEventListener("open", () => ws.send("oi"));
+  </script>
+</body>
+</html>
