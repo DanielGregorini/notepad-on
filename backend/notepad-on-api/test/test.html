@@ -1,65 +1,132 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>Teste WebSocket Gin</title>
+  <meta charset="utf-8" />
+  <title>Notepad WS — Teste</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: sans-serif; margin: 2rem; }
-    #log { border: 1px solid #ccc; padding: 1rem; height: 200px; overflow-y: auto; }
-    #log div { margin-bottom: 0.5rem; }
-    input, button { padding: 0.5rem; margin-right: 0.5rem; }
+    body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
+    .row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+    #editor { width: 100%; height: 70vh; font: 14px/1.4 monospace; padding: 12px; }
+    #status { padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+    .ok { background:#e6ffed; color:#036400; }
+    .warn { background:#fff4e5; color:#8a4b00; }
+    .bad { background:#ffe8e8; color:#8a0000; }
+    label { font-weight: 600; }
+    input { padding: 6px 8px; }
+    button { padding: 6px 10px; cursor: pointer; }
   </style>
 </head>
 <body>
-  <h1>Teste WebSocket (/ws)</h1>
-  <div>
-    <input id="msgIn" type="text" placeholder="Digite sua mensagem" />
-    <button id="btnSend">Enviar</button>
+  <h1>Teste de Página (WebSocket)</h1>
+
+  <div class="row">
+    <label>Host:</label><input id="host" value="">
+    <label>Porta:</label><input id="port" value="8888" size="6">
+    <label>Slug:</label><input id="slug" value="">
+    <button id="connect">Conectar</button>
+    <span id="status" class="warn">desconectado</span>
   </div>
-  <h2>Log</h2>
-  <div id="log"></div>
+
+  <textarea id="editor" placeholder="Carregando conteúdo..."></textarea>
 
   <script>
-    // ajusta a URL se seu servidor não estiver em localhost:8888
-    const ws = new WebSocket("ws://" + location.hostname + ":8888/ws");
+    const $host = document.getElementById('host');
+    const $port = document.getElementById('port');
+    const $slug = document.getElementById('slug');
+    const $btn = document.getElementById('connect');
+    const $status = document.getElementById('status');
+    const $editor = document.getElementById('editor');
 
-    const logEl = document.getElementById("log");
-    const msgIn = document.getElementById("msgIn");
-    const btnSend = document.getElementById("btnSend");
+    // defaults
+    $host.value = location.hostname || 'localhost';
+    $slug.value = location.pathname.replace(/^\/+|\/+$/g, '') || 'demo';
 
-    function addLog(text) {
-      const el = document.createElement("div");
-      el.textContent = text;
-      logEl.appendChild(el);
-      logEl.scrollTop = logEl.scrollHeight;
+    let ws = null;
+    let lastSent = '';
+    let ignoreEchoOnce = false;
+    let debounceTimer = null;
+
+    function setStatus(text, cls) {
+      $status.textContent = text; $status.className = cls;
     }
 
-    ws.addEventListener("open", () => {
-      addLog("Conexão aberta");
+    function wsURLFor(host, port, slug) {
+      const isHttpsPage = location.protocol === 'https:';
+      const proto = isHttpsPage ? 'wss' : 'ws';
+      // se estiver por trás de proxy com TLS, troque host/porta conforme seu domínio
+      return `${proto}://${host}:${port}/ws/${encodeURIComponent(slug)}`;
+    }
+
+    function connect() {
+      const host = ($host.value || 'localhost').trim();
+      const port = ($port.value || '8888').trim();
+      const slug = ($slug.value || 'demo').trim();
+
+      if (ws && ws.readyState === WebSocket.OPEN) ws.close(1000, 'reconnect');
+
+      const url = wsURLFor(host, port, slug);
+      console.log('[WS] Conectando:', url);
+      try {
+        ws = new WebSocket(url);
+      } catch (e) {
+        console.error('[WS] Falha ao criar WebSocket:', e);
+        setStatus('erro ao criar WS', 'bad');
+        return;
+      }
+
+      setStatus('conectando…', 'warn');
+
+      ws.onopen = () => {
+        console.log('[WS] Aberto');
+        setStatus('conectado', 'ok');
+      };
+
+      ws.onmessage = (ev) => {
+        const text = typeof ev.data === 'string' ? ev.data : '';
+        if (ignoreEchoOnce && text === lastSent) {
+          ignoreEchoOnce = false;
+          return;
+        }
+        $editor.value = text;
+      };
+
+      ws.onclose = (ev) => {
+        console.warn('[WS] Fechado:', ev.code, ev.reason);
+        setStatus('desconectado', 'bad');
+        // reconecta simples
+        setTimeout(() => {
+          if ($status.textContent !== 'conectado') connect();
+        }, 1000);
+      };
+
+      ws.onerror = (ev) => {
+        console.error('[WS] Erro:', ev);
+        setStatus('erro', 'bad');
+      };
+    }
+
+    function sendContent() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const text = $editor.value;
+      lastSent = text;
+      ignoreEchoOnce = true;
+      try {
+        ws.send(text);
+      } catch (e) {
+        console.error('[WS] Erro send:', e);
+      }
+    }
+
+    $editor.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(sendContent, 250);
     });
 
-    ws.addEventListener("message", ev => {
-      addLog("Recebido do servidor: " + ev.data);
-    });
+    $btn.addEventListener('click', connect);
 
-    ws.addEventListener("close", () => {
-      addLog("Conexão fechada");
-    });
-
-    ws.addEventListener("error", err => {
-      addLog("Erro: " + err);
-    });
-
-    btnSend.addEventListener("click", () => {
-      const msg = msgIn.value.trim();
-      if (!msg) return;
-      addLog("Enviando: " + msg);
-      ws.send(msg);
-      msgIn.value = "";
-    });
-
-    // opcional: envie “oi” automaticamente ao carregar a página
-    // ws.addEventListener("open", () => ws.send("oi"));
+    // conecta automaticamente
+    connect();
   </script>
 </body>
 </html>
